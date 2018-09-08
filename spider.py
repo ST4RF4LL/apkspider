@@ -8,7 +8,7 @@ import sys
 import time
 import requests
 import hashlib
-
+import sqlite3
 
 def md5(arg):
     md5_hash = hashlib.md5()
