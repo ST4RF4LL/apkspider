@@ -21,7 +21,7 @@ headers2={"User-Agent":user_agent,'Connection': 'keep-alive'}
 
 def md5(arg):
     md5_hash = hashlib.md5()
-    md5_hash.update(arg)
+    md5_hash.update(arg.encode('utf-8'))
     return md5_hash.hexdigest()
 
 parser = argparse.ArgumentParser(description='A little tool for crawling apks automatically.')
@@ -38,53 +38,84 @@ input_store = args.store
 
 app_stores={'kuan':'https://www.coolapk.com/apk','wandoujia':'https://www.wandoujia.com/category/app'}
 
+class db_opt():
+    def db_init(self):
+        conn = sqlite3.connect('apkspider.db')
+        c= conn.cursor()
+        c.execute('''
+        CREATE TABLE APKINFO(
+        apkname text not null,
+        platform char(20) not null,
+        size int not null,
+        md5 char(64) not null
+        );
+        ''')
+        print("database init successfully")
+        conn.commit()
+        comm.close()
+    def db_insert(self,apkname,platform,size,hash_val):
+        conn = sqlite3.connect('apkspider.db')
+        c= conn.cursor()
+        comma = 'INSERT INTO APKINFO(apkname,platform,size,md5)VALUES(\'%s\',\'%s\',%d,\'%s\');'%(apkname,platform,size,hash_val)
+        print(comma)
+        c.execute(comma)
+        print("insert info into database successfully!")
+        conn.commit()
+        conn.close()
 
 class crawler():
     def __init__(self,store):
         self.url = app_stores[store]
         self.store = store
+
+    def extract_wandou():#for wandoujia
+        # conn = sqlite3.connect('apkspider.db')
+        # print("connect to database successfully!")
+        # c=     
+        pass
     def get_links(self):
         if self.store=='kuan':
-            payload={'p':1}
-            res = requests.post(self.url,params=payload,headers=headers)
-            markup = res.text
-            # print(markup)
-            soup = BeautifulSoup(markup,"lxml")
-            # print(soup)
-            soup = soup.find('div','app_left_list')
-            # print(soup)
-            apks = soup.find_all('a')
-            print('solving the %s:page:%s'%(self.store,1))
-            file = open('./downlist.'+self.store,'a')
-            for apk in apks[:10]:
-                # print(apk.get('href'))
-                href = apk.get('href')
-                file.write('https://www.coolapk.com'+href+'\n')
-                #add to list
-            lastpage_href = apks[-1].get('href')
-            reg = re.compile(r"=\d+")
-            Maxpage = int(reg.search(lastpage_href)[0][1:])
-            # print(Maxpage)
+            # payload={'p':1}
+            # res = requests.post(self.url,params=payload,headers=headers)
+            # markup = res.text
+            # # print(markup)
+            # soup = BeautifulSoup(markup,"lxml")
+            # # print(soup)
+            # soup = soup.find('div','app_left_list')
+            # # print(soup)
+            # apks = soup.find_all('a')
+            # print('solving the %s:page:%s'%(self.store,1))
+            # file = open('./downlist.'+self.store,'a')
+            # for apk in apks[:10]:
+            #     # print(apk.get('href'))
+            #     href = apk.get('href')
+            #     file.write('https://www.coolapk.com'+href+'\n')
+            #     #add to list
+            # lastpage_href = apks[-1].get('href')
+            # reg = re.compile(r"=\d+")
+            # Maxpage = int(reg.search(lastpage_href)[0][1:])
+            # # print(Maxpage)
             
-            for i in range(2,Maxpage+1):
-                payload={'p':i}
-                res = requests.post(self.url,params=payload,headers=headers)
-                markup = res.text
-                # print(markup)
-                soup = BeautifulSoup(markup,"lxml")
-                # print(soup)
-                soup = soup.find('div','app_left_list')
-                # print(soup)
-                apks = soup.find_all('a')
-                print('solving the %s:page:%s'%(self.store,i))
-                for apk in apks[:10]:
-                    href = apk.get('href')
-                    if href.startswith(r'/apk?p='):
-                        break
-                    file.write('https://www.coolapk.com'+href+'\n')                    
-                    #add to list
-            file.close()
-        
+            # for i in range(2,Maxpage+1):
+            #     payload={'p':i}
+            #     res = requests.post(self.url,params=payload,headers=headers)
+            #     markup = res.text
+            #     # print(markup)
+            #     soup = BeautifulSoup(markup,"lxml")
+            #     # print(soup)
+            #     soup = soup.find('div','app_left_list')
+            #     # print(soup)
+            #     apks = soup.find_all('a')
+            #     print('solving the %s:page:%s'%(self.store,i))
+            #     for apk in apks[:10]:
+            #         href = apk.get('href')
+            #         if href.startswith(r'/apk?p='):
+            #             break
+            #         file.write('https://www.coolapk.com'+href+'\n')                    
+            #         #add to list
+            # file.close()
+            exit(1)
+
         elif self.store == 'anzhi':
             exit(1)
         
@@ -140,6 +171,15 @@ def main():
         exit(1)
     # crawler.download('taobao','https://android-apps.pp.cn/fs08/2018/08/16/5/110_b2a11955d308c069f07033959edc1226.apk?yingid=pp_client&packageid=400685613&md5=03661e11fb66e5dd97c225f3ae478f45&minSDK=14&size=91718666&shortMd5=8c65554e572b38a1f82b92d496b23b3e&crc32=3329255329')
 
+def test():
+    d = db_opt()
+    try:
+        d.db_init()    
+    except:
+        pass
+    d.db_insert('taobao','test',45,md5('taobao'))
+    
 
 if __name__ == '__main__':
-    main()
+    # main()
+    test()

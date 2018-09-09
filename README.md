@@ -52,30 +52,6 @@ Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)
 - 我个人想要保留某一apk的没一个版本，我决定命名法为: ApkName_md5
 
 
-## bs4
-```
-/apk/com.coolapk.market
-/apk/com.tencent.mm
-/apk/com.netease.cloudmusic
-/apk/com.speedsoftware.rootexplorer
-/apk/com.tencent.mobileqq
-/apk/tv.danmaku.bili
-/apk/com.taobao.taobao
-/apk/com.sina.weibo
-/apk/com.snda.wifilocating
-/apk/com.eg.android.AlipayGphone
-javascript:void(0);
-javascript:void(0);
-/apk?p=1
-/apk?p=2
-/apk?p=3
-/apk?p=4
-/apk?p=5
-/apk?p=2
-/apk?p=604
-
-```
-这是一个test时的输出，因为apk和页码的链接都在一块儿，而且都是a标签，所以会导致被一起抓下来。这里可以从中获取尾页页码，但暂时还没加
 
 ## download list
 用来临时存储下载任务的文件，暂时仅使用同一个list文件，日后根据实际情况决定是否拆分
