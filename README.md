@@ -31,29 +31,23 @@
 
 ## APK stores
 1. 酷安：下载链接通过js脚本onDownloadApk动态获取，就在页面源码里 **每页最大10个app** **有cookie的认证，无法获取下载链接，无限期搁置**
-2. 豌豆荚：应用主页上的下载链接应该是用来下载豌豆荚的，需要点击进去，使用普通下载获取链接;主页面上是 **惰性加载**
-```javascript
-<script type="text/javascript">
-    function onDownloadApk($downloadId) {
-        if ($downloadId) {
-            window.location.href = "https://dl.coolapk.com/down?pn=me.ele&id=MTMwMDA&h=38f02906pepw2b&from=click";
-        } else {
-            window.location.href = 'https://dl.coolapk.com/down?pn=com.coolapk.market&id=NDU5OQ&h=38f02906pepw2b&from=click';
-        }
-    }
-</script>
-```
+2. 豌豆荚：应用主页上的下载链接应该是用来下载豌豆荚的，需要点击进去，使用普通下载获取链接
+
 3. 安智 'http://www.anzhi.com/list_1_1_hot.html'热门应用 ‘http://www.anzhi.com/list_2_1_hot.html’热门游戏
 
 ## sqlite3
 Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)  (optional:version)
 
+实际:  apkname platform size md5
 ## file download
 - 我个人想要保留某一apk的没一个版本，我决定命名法为: ApkName_md5
-
-
+- get:filesize:这里`普通下载`给的链接有一个重定向，即原链接的content_length=0，需要重定向链接才能获取filesize
 
 ## download list
 用来临时存储下载任务的文件，暂时仅使用同一个list文件，日后根据实际情况决定是否拆分
 可能需要根据不同的商城来区分，因为这是app的链接，下载链接还需要从该网页中获取，已经app信息从中提取放入sqlite3
 逻辑:websolver爬取网页获取各app页面->spider获取app信息存入sqlite3->下载
+
+## progressbar
+需要进度条，就需要给下载一个独立的线程  
+接着将progressbar的maxvalue设定为apk的size，进度设定为当前的下载量

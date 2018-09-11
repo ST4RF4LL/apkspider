@@ -12,16 +12,26 @@ import sqlite3
 import re
 import lxml
 from bs4 import BeautifulSoup
+import threading
 
 stores_list = ['kuan','anzhi','wandoujia']
 
 user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:62.0) Gecko/20100101 Firefox/62.0"
 headers={"User-Agent":user_agent}
-headers2={"User-Agent":user_agent,'Connection': 'keep-alive'}
+headers2={"User-Agent":user_agent,
+'Accept':'text/html,application/xhtm +xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+'Accept-Encoding':'gzip, deflate, sdch, br',
+'Accept-Language':'zh-CN,zh;q=0.8',
+'Connection':'keep-alive'}
 
 def md5(arg):
     md5_hash = hashlib.md5()
     md5_hash.update(arg.encode('utf-8'))
+    return md5_hash.hexdigest()
+
+def md5_2(arg):
+    md5_hash = hashlib.md5()
+    md5_hash.update(arg)
     return md5_hash.hexdigest()
 
 parser = argparse.ArgumentParser(description='A little tool for crawling apks automatically.')
@@ -53,15 +63,107 @@ class db_opt():
         print("database init successfully")
         conn.commit()
         comm.close()
+
     def db_insert(self,apkname,platform,size,hash_val):
         conn = sqlite3.connect('apkspider.db')
         c= conn.cursor()
         comma = 'INSERT INTO APKINFO(apkname,platform,size,md5)VALUES(\'%s\',\'%s\',%d,\'%s\');'%(apkname,platform,size,hash_val)
-        print(comma)
+        # print(comma)
         c.execute(comma)
         print("insert info into database successfully!")
         conn.commit()
         conn.close()
+    
+    def db_update(self,apkname,platform,size,hash_val):#My opinion, size and md5 may change together
+        conn = sqlite3.connect('apkspider.db')
+        c= conn.cursor()
+        comma = 'UPDATE APKINFO SET size = %d , md5 = \'%s\' where apkname = \'%s\' and platform = \'%s\';'%(size,hash_val,apkname,platform)
+        # print(comma)
+        c.execute(comma)
+        print("update info into database successfully!")
+        conn.commit()
+        conn.close()
+
+    def db_delete(self,apkname,platform):
+        conn = sqlite3.connect('apkspider.db')
+        c= conn.cursor()
+        comma = 'delete from APKINFO where apkname = \'%s\' and platform = \'%s\';'%(apkname,platform)
+        # print(comma)
+        c.execute(comma)
+        print("delete info into database successfully!")
+        conn.commit()
+        conn.close()
+    
+    def db_gethash(self,apkname,platform):#select * from APKINFO where apkname = 'XXX' and platform = 'XXX'
+        conn = sqlite3.connect('apkspider.db')
+        c= conn.cursor()
+        comma = 'select md5 from APKINFO where apkname = \'%s\' and platform = \'%s\';'%(apkname,platform)
+        # print(comma)
+        cursor = c.execute(comma)
+        hash_val = list(cursor)[0][0]
+        conn.close()
+        return hash_val
+    
+class downloader():
+    def __init__(self):
+        self.db = db_opt()
+        self.savepath = out_path
+
+    def download(self,filepath,url):
+        
+        file = requests.get(url,headers=headers,stream=True)
+        with open(filepath,'wb') as apk:
+            for chunk in file.iter_content(chunk_size=1024):
+                if chunk:
+                    apk.write(chunk)
+        #     apk.write(file.content)
+            # hash_val = md5(name)
+
+            # print('filname=%s\nsize=%d\nmd5=%s'%(name,filesize,hash_val))
+
+    def wandoujia(self):
+        with open('downlist.wandoujia','r') as listfile:
+            link = listfile.readline().replace('\n','')# Important! readline will give the link a '\n'
+            # print(link)
+    
+            #TODO this link is not a download link!!!!
+            resp = requests.get(link,headers=headers)
+            markup = BeautifulSoup(resp.text,'lxml')
+            url = markup.find('a','normal-dl-btn').get('href')
+            # print(url)
+            reg = re.compile(r"/apps/[a-zA-Z.]+")
+            name = reg.search(link)[0][6:]
+
+            filepath = self.savepath+name+'_'+md5(name)
+            res = requests.head(url,allow_redirects=True)
+            # true_url = res.headers['Location']
+            # res = requests.head(true_url)
+            # print(res.headers)
+            filesize = int(res.headers['Content-Length'])
+            # print(filesize)
+
+            # self.download(name,url)
+            t1 = threading.Thread(target=self.download,args=(filepath,url))
+            t1.start()
+            self.download_progress(filepath,filesize)
+            # calculating hash and add to sqlite3
+            with open(filepath,'rb') as file_done:
+                hash_val = md5_2(file_done.read())
+            
+            self.db.db_insert(name,'wandoujia',int(filesize/1024),hash_val)
+
+            # print(name)
+
+    def download_progress(self,filepath,filesize):
+        with progressbar.ProgressBar(max_value=int(filesize/1024)) as bar:
+            current_size=0
+            while(current_size<filesize):
+                if(os.path.exists(filepath)):
+                    current_size = os.path.getsize(filepath)
+                    time.sleep(0.1)
+                    bar.update(int(current_size/1024))
+            print('download success\n')
+            
 
 class crawler():
     def __init__(self,store):
@@ -148,14 +250,7 @@ class crawler():
             print('Cannot found target appstore:%s'%store)
             exit(1)
     
-    def download(filename,url):
-        filename = md5(filename.encode('utf-8'))
-        res = requests.head(url)
-        filesize = round(float(res.headers['Content-Length']) / 1048576, 2)
-        file = requests.get(url,headers=headers,timeout=2)
-        with open(filename,'wb') as apk:
-            apk.write(file.content)
-            print('download success\n')
+    
 
 def main():
     # print(input_store)
@@ -177,7 +272,14 @@ def test():
         d.db_init()    
     except:
         pass
-    d.db_insert('taobao','test',45,md5('taobao'))
+    down = downloader()
+
+    down.wandoujia()
+
+    # d.db_insert('taobao','test',45,md5('taobao'))
+    # d.db_gethash('taobao','test')
+    # d.db_delete('taobao','test')
+    # d.db_update('taobao','test',50,md5('taobao'))
     
 
 if __name__ == '__main__':
