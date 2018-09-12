@@ -36,7 +36,7 @@ def md5_2(arg):
 
 parser = argparse.ArgumentParser(description='A little tool for crawling apks automatically.')
 parser.add_argument('-o','--output',help="set the path to the apks have been downloaded.",default=r"/tmp/")
-parser.add_argument('-m','--max',help="set the Max amount the apks that will be downloaded",type=int)
+parser.add_argument('-m','--max',help="set the Max amount the apks that will be downloaded",type=int,default=10000)
 parser.add_argument('-u','--update',help='check the apk downloaded for the latest version',default=0)
 parser.add_argument('-s','--store',help='set the target store to download the apk',default=None)#None means all
 args = parser.parse_args()
@@ -45,6 +45,8 @@ out_path = args.output
 Max_count = args.max
 update_flag = args.update
 input_store = args.store
+
+download_count = 0
 
 app_stores={'kuan':'https://www.coolapk.com/apk','wandoujia':'https://www.wandoujia.com/category/app'}
 
@@ -89,20 +91,28 @@ class db_opt():
         c= conn.cursor()
         comma = 'delete from APKINFO where apkname = \'%s\' and platform = \'%s\';'%(apkname,platform)
         # print(comma)
-        c.execute(comma)
-        print("delete info into database successfully!")
-        conn.commit()
-        conn.close()
+        try:
+            c.execute(comma)
+            print("delete info into database successfully!")
+            conn.commit()
+            conn.close()    
+        except:
+            pass
+        
     
     def db_gethash(self,apkname,platform):#select * from APKINFO where apkname = 'XXX' and platform = 'XXX'
         conn = sqlite3.connect('apkspider.db')
         c= conn.cursor()
         comma = 'select md5 from APKINFO where apkname = \'%s\' and platform = \'%s\';'%(apkname,platform)
         # print(comma)
-        cursor = c.execute(comma)
-        hash_val = list(cursor)[0][0]
-        conn.close()
-        return hash_val
+        try:
+            cursor = c.execute(comma)
+            hash_val = list(cursor)[0][0]
+            conn.close()
+            return hash_val    
+        except:
+            return ''
+        
     
 class downloader():
     def __init__(self):
@@ -122,37 +132,57 @@ class downloader():
             # print('filname=%s\nsize=%d\nmd5=%s'%(name,filesize,hash_val))
 
     def wandoujia(self):
-        with open('downlist.wandoujia','r') as listfile:
+        global download_count
+        with open('downlist.wandoujia','r+') as listfile:
             link = listfile.readline().replace('\n','')# Important! readline will give the link a '\n'
             # print(link)
-    
-            #TODO this link is not a download link!!!!
-            resp = requests.get(link,headers=headers)
-            markup = BeautifulSoup(resp.text,'lxml')
-            url = markup.find('a','normal-dl-btn').get('href')
-            # print(url)
-            reg = re.compile(r"/apps/[a-zA-Z.]+")
-            name = reg.search(link)[0][6:]
+            while link != '' and download_count<Max_count:
+                resp = requests.get(link,headers=headers)
+                markup = BeautifulSoup(resp.text,'lxml')
+                url = markup.find('a','normal-dl-btn').get('href')
+                # print(url)
+                reg = re.compile(r"/apps/[a-zA-Z.]+")
+                name = reg.search(link)[0][6:]
 
-            filepath = self.savepath+name+'_'+md5(name)
-            res = requests.head(url,allow_redirects=True)
-            # true_url = res.headers['Location']
-            # res = requests.head(true_url)
-            # print(res.headers)
-            filesize = int(res.headers['Content-Length'])
-            # print(filesize)
+                filepath = self.savepath+name
 
-            # self.download(name,url)
-            t1 = threading.Thread(target=self.download,args=(filepath,url))
-            t1.start()
-            self.download_progress(filepath,filesize)
-            # calculating hash and add to sqlite3
-            with open(filepath,'rb') as file_done:
-                hash_val = md5_2(file_done.read())
-            
-            self.db.db_insert(name,'wandoujia',int(filesize/1024),hash_val)
+                old_hash = self.db.db_gethash(name,'wandoujia')
+                # print(old_hash)
+                if old_hash != '':#means not new file but I have no idea how to get the hash before I download it
+                    filepath = self.savepath+'temp_'+md5(name)#so I save it as 'temp_md5',then I will check this new file's md5
+                res = requests.head(url,allow_redirects=True)
+                # true_url = res.headers['Location']
+                # res = requests.head(true_url)
+                filesize = int(res.headers['Content-Length'])
+                # self.download(name,url)
+                print('start downloading %s'%name)
+                t1 = threading.Thread(target=self.download,args=(filepath,url))
+                t1.start()
+                self.download_progress(filepath,filesize)
+                # calculating hash and add to sqlite3
+                with open(filepath,'rb') as file_done:
+                    hash_val = md5_2(file_done.read())
 
-            # print(name)
+                print("old_hash:%s\nnew_hash:%s"%(old_hash,hash_val))
+
+                if hash_val == old_hash:# means the same file,delete this file
+                    #delete
+                    #TODO
+                    os.remove(filepath)
+                    print('same apk,deleted!')
+                elif old_hash=='':#means this is a new file
+                    print('a new apk!')
+                    self.db.db_insert(name,'wandoujia',int(filesize/1024),hash_val)
+                    os.rename(filepath,self.savepath+name+'_'+hash_val)
+                else:#
+                    print('this apk is updated to latest!')
+                    self.db.db_update(name,'wandoujia',int(filesize/1024),hash_val)
+                    os.rename(filepath,self.savepath+name+'_'+hash_val)
+
+                # coutinue to next downloading
+                link = listfile.readline().replace('\n','')# Important! readline will give the link a '\n'
+                download_count += 1
+
 
     def download_progress(self,filepath,filesize):
         with progressbar.ProgressBar(max_value=int(filesize/1024)) as bar:
@@ -162,7 +192,7 @@ class downloader():
                     current_size = os.path.getsize(filepath)
                     time.sleep(0.1)
                     bar.update(int(current_size/1024))
-            print('download success\n')
+        print('download success and saved as:%s'%filepath)
             
 
 class crawler():

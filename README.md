@@ -51,3 +51,8 @@ Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)
 ## progressbar
 需要进度条，就需要给下载一个独立的线程  
 接着将progressbar的maxvalue设定为apk的size，进度设定为当前的下载量
+
+## TODO
+1. 还没实现断点续传以及重启脚本继续下载任务
+2. 还没做下载列表逐行删除
+3. 
