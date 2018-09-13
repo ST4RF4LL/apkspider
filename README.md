@@ -55,4 +55,8 @@ Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)
 ## TODO
 1. 还没实现断点续传以及重启脚本继续下载任务
 2. 还没做下载列表逐行删除
-3. 
+
+
+## 改方案
+发现一个挺致命的问题，针对TODO里的第二条'下载列表逐行删除'，python貌似没这个功能  
+那我现在的想法就是弃用弱智的文件读写，改为数据库读写

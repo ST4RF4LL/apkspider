@@ -55,7 +55,7 @@ class db_opt():
         conn = sqlite3.connect('apkspider.db')
         c= conn.cursor()
         c.execute('''
-        CREATE TABLE APKINFO(
+        CREATE TABLE IF NOT EXISTS APKINFO(
         apkname text not null,
         platform char(20) not null,
         size int not null,
@@ -63,8 +63,22 @@ class db_opt():
         );
         ''')
         print("database init successfully")
+
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS APKLIST(
+        id integer primary key autoincrement,
+        url text not null,
+        platform char(20) not null,
+        status int not null DEFAULT 0
+        );
+        ''')
+        # 0 means not downloaded
+        # 1 means downloading
+        # 2 means done
+        print("list database init successfully")
         conn.commit()
-        comm.close()
+        conn.close()
+
 
     def db_insert(self,apkname,platform,size,hash_val):
         conn = sqlite3.connect('apkspider.db')
@@ -98,8 +112,8 @@ class db_opt():
             conn.close()    
         except:
             pass
-        
     
+
     def db_gethash(self,apkname,platform):#select * from APKINFO where apkname = 'XXX' and platform = 'XXX'
         conn = sqlite3.connect('apkspider.db')
         c= conn.cursor()
@@ -112,8 +126,36 @@ class db_opt():
             return hash_val    
         except:
             return ''
-        
+
+    # this insert maybe not so good as write so frequently
+    def list_db_insert(self,url,platform):
+        conn = sqlite3.connect('apkspider.db')
+        c= conn.cursor()
+        comma = 'INSERT INTO APKLIST(url,platform)VALUES(\'%s\',\'%s\');'%(url,platform)
+        # print(comma)
+        c.execute(comma)
+        # print("insert info into database successfully!")
+        conn.commit()
+        conn.close()
+
+    def list_db_geturl(self,platform):
+        with sqlite3.connect('apkspider.db') as conn:
+            # TODO to continue last downloading task we can get the url that status = 1
+            # but anyway use status !=2 sometimes to dangerous
+            comma = r"select id,url from APKLIST where platform = 'wandoujia' and status = 0 order by id limit 1;"
+            # print(comma)
+            try:
+                li = list(conn.execute(comma))
+                id = li[0][0]
+                url = li[0][1]
+                return id,url
+            except:
+                return -1,''
     
+    def list_db_update_status(self,id,status):
+        with sqlite3.connect('apkspider.db') as conn:
+            comma = r"update APKLIST set status = %d where id = %d;"%(status,id)
+            conn.execute(comma)
 class downloader():
     def __init__(self):
         self.db = db_opt()
@@ -133,55 +175,63 @@ class downloader():
 
     def wandoujia(self):
         global download_count
-        with open('downlist.wandoujia','r+') as listfile:
-            link = listfile.readline().replace('\n','')# Important! readline will give the link a '\n'
-            # print(link)
-            while link != '' and download_count<Max_count:
-                resp = requests.get(link,headers=headers)
-                markup = BeautifulSoup(resp.text,'lxml')
-                url = markup.find('a','normal-dl-btn').get('href')
-                # print(url)
-                reg = re.compile(r"/apps/[a-zA-Z.]+")
-                name = reg.search(link)[0][6:]
+        # with open('downlist.wandoujia','r+') as listfile:
+        
+        id,link = self.db.list_db_geturl('wandoujia')
+        print('link:'+link)
+        while link != '' and download_count<Max_count:
+            self.db.list_db_update_status(id,1)
+            resp = requests.get(link,headers=headers)
+            markup = BeautifulSoup(resp.text,'lxml')
+            url = markup.find('a','normal-dl-btn').get('href')
+            # print(url)
+            reg = re.compile(r"/apps/[a-zA-Z.]+")
+            name = reg.search(link)[0][6:]
 
-                filepath = self.savepath+name
+            filepath = self.savepath+name
 
-                old_hash = self.db.db_gethash(name,'wandoujia')
-                # print(old_hash)
-                if old_hash != '':#means not new file but I have no idea how to get the hash before I download it
-                    filepath = self.savepath+'temp_'+md5(name)#so I save it as 'temp_md5',then I will check this new file's md5
-                res = requests.head(url,allow_redirects=True)
-                # true_url = res.headers['Location']
-                # res = requests.head(true_url)
-                filesize = int(res.headers['Content-Length'])
-                # self.download(name,url)
-                print('start downloading %s'%name)
-                t1 = threading.Thread(target=self.download,args=(filepath,url))
-                t1.start()
-                self.download_progress(filepath,filesize)
-                # calculating hash and add to sqlite3
-                with open(filepath,'rb') as file_done:
-                    hash_val = md5_2(file_done.read())
+            old_hash = self.db.db_gethash(name,'wandoujia')
+            # print(old_hash)
+            if old_hash != '':#means not new file but I have no idea how to get the hash before I download it
+                filepath = self.savepath+'temp_'+md5(name)#so I save it as 'temp_md5',then I will check this new file's md5
+            res = requests.head(url,allow_redirects=True)
+            # true_url = res.headers['Location']
+            # res = requests.head(true_url)
+            filesize = int(res.headers['Content-Length'])
+            # self.download(name,url)
+            print('start downloading %s'%name)
+            t1 = threading.Thread(target=self.download,args=(filepath,url))
+            t1.start()
+            self.download_progress(filepath,filesize)
+            # calculating hash and add to sqlite3
+            with open(filepath,'rb') as file_done:
+                hash_val = md5_2(file_done.read())
 
-                print("old_hash:%s\nnew_hash:%s"%(old_hash,hash_val))
+            print("old_hash:%s\nnew_hash:%s"%(old_hash,hash_val))
 
-                if hash_val == old_hash:# means the same file,delete this file
-                    #delete
-                    #TODO
-                    os.remove(filepath)
-                    print('same apk,deleted!')
-                elif old_hash=='':#means this is a new file
-                    print('a new apk!')
-                    self.db.db_insert(name,'wandoujia',int(filesize/1024),hash_val)
-                    os.rename(filepath,self.savepath+name+'_'+hash_val)
-                else:#
-                    print('this apk is updated to latest!')
-                    self.db.db_update(name,'wandoujia',int(filesize/1024),hash_val)
-                    os.rename(filepath,self.savepath+name+'_'+hash_val)
-
-                # coutinue to next downloading
-                link = listfile.readline().replace('\n','')# Important! readline will give the link a '\n'
+            if hash_val == old_hash:# means the same file,delete this file
+                #delete
+                os.remove(filepath)
+                print('same apk,deleted!')
+            elif old_hash=='':#means this is a new file
+                print('a new apk!')
+                self.db.db_insert(name,'wandoujia',int(filesize/1024),hash_val)
+                os.rename(filepath,self.savepath+name+'_'+hash_val)
                 download_count += 1
+
+            else:
+                print('this apk is updated to latest!')
+                self.db.db_update(name,'wandoujia',int(filesize/1024),hash_val)
+                os.rename(filepath,self.savepath+name+'_'+hash_val)
+                download_count += 1
+
+            #delete the url in the download list
+            self.db.list_db_update_status(id,2)            
+            id,link = self.db.list_db_geturl('wandoujia')
+            # coutinue to next downloading
+            # link = listfile.readline().replace('\n','')# Important! readline will give the link a '\n'
+
+            # download_count += 1
 
 
     def download_progress(self,filepath,filesize):
@@ -199,12 +249,9 @@ class crawler():
     def __init__(self,store):
         self.url = app_stores[store]
         self.store = store
-
-    def extract_wandou():#for wandoujia
-        # conn = sqlite3.connect('apkspider.db')
-        # print("connect to database successfully!")
-        # c=     
-        pass
+        self.db = db_opt()
+     
+    
     def get_links(self):
         if self.store=='kuan':
             # payload={'p':1}
@@ -257,24 +304,26 @@ class crawler():
             cates = markup.find_all('li','parent-cate')
             urls = [cate.find('a','cate-link').get('href') for cate in cates]
             # print(urls)
-            file = open('./downlist.'+self.store,'a')
-            for child_page in urls:
-                i=1
-                while i :
-                    print('get page:%d\n'%i)
-                    url = child_page + r'/%d'%i
-                    res = requests.get(url,headers=headers)
-                    markup = BeautifulSoup(res.text,'lxml')
-                    cates = markup.find_all('li','card')
-                    if len(cates)==0:
-                        break;
-                    links = [cate.find('a','name').get('href') for cate in cates]
-                    for link in links:
-                        file.write(link+'\n')
-                        print(link)
-                    i += 1
-            file.close()
-
+            # with open('./downlist.'+self.store,'a') as file:
+            with sqlite3.connect('apkspider.db') as conn:
+                for child_page in urls:
+                    i=1
+                    while i :
+                        print('get page:%d\n'%i)
+                        url = child_page + r'/%d'%i
+                        res = requests.get(url,headers=headers)
+                        markup = BeautifulSoup(res.text,'lxml')
+                        cates = markup.find_all('li','card')
+                        if len(cates)==0:
+                            break;
+                        links = [cate.find('a','name').get('href') for cate in cates]
+                        for link in links:
+                            # file.write(link+'\n')
+                            comma = 'INSERT INTO APKLIST(url,platform)VALUES(\'%s\',\'%s\');'%(link,'wandoujia')
+                            conn.execute(comma)
+                            # print(link)
+                        conn.commit()
+                        i += 1
 
         else:
             print('Cannot found target appstore:%s'%store)
@@ -298,12 +347,16 @@ def main():
 
 def test():
     d = db_opt()
-    try:
-        d.db_init()    
-    except:
-        pass
-    down = downloader()
+    # try:
+    #     d.db_init()    
+    # except:
+    #     pass
+    d.db_init()
 
+    # c = crawler('wandoujia')
+    # c.get_links()
+
+    down = downloader()
     down.wandoujia()
 
     # d.db_insert('taobao','test',45,md5('taobao'))
