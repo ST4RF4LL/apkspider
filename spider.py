@@ -14,7 +14,7 @@ import lxml
 from bs4 import BeautifulSoup
 import threading
 
-stores_list = ['kuan','anzhi','wandoujia']
+stores_list = ['wandoujia']
 
 user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:62.0) Gecko/20100101 Firefox/62.0"
 headers={"User-Agent":user_agent}
@@ -39,12 +39,22 @@ parser.add_argument('-o','--output',help="set the path to the apks have been dow
 parser.add_argument('-m','--max',help="set the Max amount the apks that will be downloaded",type=int,default=10000)
 parser.add_argument('-u','--update',help='check the apk downloaded for the latest version',default=0)
 parser.add_argument('-s','--store',help='set the target store to download the apk',default=None)#None means all
+parser.add_argument('-r','--refresh',help='refresh the downloadlist',type=int,default=0)
+parser.add_argument('-l','--last',help='continue last download task',type=int,default=0)
+parser.add_argument('-d','--download',help='create a downloading task that according the downloadlistdb',type=int,default=0)
+
+
+# parser.add_argument('-c','--continue',help='check the apk downloaded for the latest version',default=0)
+
 args = parser.parse_args()
 
 out_path = args.output
 Max_count = args.max
 update_flag = args.update
 input_store = args.store
+flag_refresh = args.refresh
+flag_continue = args.last
+flag_download = args.download
 
 download_count = 0
 
@@ -142,7 +152,7 @@ class db_opt():
         with sqlite3.connect('apkspider.db') as conn:
             # TODO to continue last downloading task we can get the url that status = 1
             # but anyway use status !=2 sometimes to dangerous
-            comma = r"select id,url from APKLIST where platform = 'wandoujia' and status = 0 order by id limit 1;"
+            comma = r"select id,url from APKLIST where platform = 'wandoujia' and status != 2 order by id limit 1;"
             # print(comma)
             try:
                 li = list(conn.execute(comma))
@@ -308,17 +318,21 @@ class crawler():
             with sqlite3.connect('apkspider.db') as conn:
                 for child_page in urls:
                     i=1
+                    # print(child_page)
                     while i :
                         print('get page:%d\n'%i)
                         url = child_page + r'/%d'%i
                         res = requests.get(url,headers=headers)
                         markup = BeautifulSoup(res.text,'lxml')
+                        print(markup)
+                        exit(1)
                         cates = markup.find_all('li','card')
                         if len(cates)==0:
                             break;
                         links = [cate.find('a','name').get('href') for cate in cates]
                         for link in links:
                             # file.write(link+'\n')
+                            #TODO there is no check of existed items
                             comma = 'INSERT INTO APKLIST(url,platform)VALUES(\'%s\',\'%s\');'%(link,'wandoujia')
                             conn.execute(comma)
                             # print(link)
@@ -333,16 +347,30 @@ class crawler():
 
 def main():
     # print(input_store)
-    if input_store in stores_list:
-        cr = crawler(input_store)
-        cr.get_links()
-        # download(input_store)
-    elif input_store == None:
-        for i in stores_list:
-            cr = crawler(i)
-            # download(i)
-    else:
+    d = db_opt()
+    d.db_init()
+
+    if(flag_continue):
+        print("continue last task")
         exit(1)
+
+    if(flag_refresh):
+        if input_store in stores_list:
+            cr = crawler(input_store)
+            print("get %s urls"%input_store)
+            cr.get_links()
+        # download(input_store)
+        # elif input_store == None:
+        #     for i in stores_list:
+        #         cr = crawler(i)
+        #         cr.get_links()
+        #      # download(i)
+        else:
+            exit(1)
+
+    if(flag_download):
+        down = downloader()
+        down.wandoujia()
     # crawler.download('taobao','https://android-apps.pp.cn/fs08/2018/08/16/5/110_b2a11955d308c069f07033959edc1226.apk?yingid=pp_client&packageid=400685613&md5=03661e11fb66e5dd97c225f3ae478f45&minSDK=14&size=91718666&shortMd5=8c65554e572b38a1f82b92d496b23b3e&crc32=3329255329')
 
 def test():
@@ -353,11 +381,13 @@ def test():
     #     pass
     d.db_init()
 
-    # c = crawler('wandoujia')
-    # c.get_links()
+    c = crawler('wandoujia')
+    c.get_links()
 
-    down = downloader()
-    down.wandoujia()
+    # down = downloader()
+    # down.wandoujia()
+
+    # print(args.r)
 
     # d.db_insert('taobao','test',45,md5('taobao'))
     # d.db_gethash('taobao','test')

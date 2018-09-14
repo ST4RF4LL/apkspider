@@ -27,13 +27,11 @@
 - `-o`:`--output`
 - `-c`:`--continue`
 - `-u`:`--update`
-- 如果不给参数 则check是否有未完成任务以及check
-
-## APK stores
-1. 酷安：下载链接通过js脚本onDownloadApk动态获取，就在页面源码里 **每页最大10个app** **有cookie的认证，无法获取下载链接，无限期搁置**
-2. 豌豆荚：应用主页上的下载链接应该是用来下载豌豆荚的，需要点击进去，使用普通下载获取链接
-
-3. 安智 'http://www.anzhi.com/list_1_1_hot.html'热门应用 ‘http://www.anzhi.com/list_2_1_hot.html’热门游戏
+- `-s`:``--store`
+- `-r`:`refresh`
+- 
+<!-- - `-c`:--continue -->
+- 如果不给参数 什么都不做
 
 ## sqlite3
 Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)  (optional:version)
@@ -60,3 +58,6 @@ Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)
 ## 改方案
 发现一个挺致命的问题，针对TODO里的第二条'下载列表逐行删除'，python貌似没这个功能  
 那我现在的想法就是弃用弱智的文件读写，改为数据库读写
+
+## 大改方案
+豌豆荚太酷炫了，竟然把翻页式的改成动态加载的了
