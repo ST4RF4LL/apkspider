@@ -61,3 +61,9 @@ Apkname platform md5 update_time size download_status(0:no,1:downloading,2:done)
 
 ## 大改方案
 豌豆荚太酷炫了，竟然把翻页式的改成动态加载的了
+
+
+# v0.9
+1. 把豌豆荚的爬虫修好了
+2. 考虑写一些断点续传
+3. 命令行参数的问题等找大师傅问问再改
