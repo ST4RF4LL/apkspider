@@ -44,16 +44,16 @@ parser.add_argument(
     '-o', '--output', help="set the path to the apks have been downloaded.", default=r"/tmp/")
 parser.add_argument(
     '-m', '--max', help="set the Max amount the apks that will be downloaded", type=int, default=10000)
+# parser.add_argument(
+#     '-u', '--update', help='check the apk downloaded for the latest version', action="store_true",default=False)
 parser.add_argument(
-    '-u', '--update', help='check the apk downloaded for the latest version', default=0)
-parser.add_argument(
-    '-s', '--store', help='set the target store to download the apk', default=None)  # None means all
+    '-s', '--store', help='set the target store to download the apk', default='wandoujia')
 parser.add_argument('-r', '--refresh',
-                    help='refresh the downloadlist', type=int, default=0)
+                    help='refresh the downloadlist', action="store_true", default=False)
 parser.add_argument(
-    '-l', '--last', help='continue last download task', type=int, default=0)
+    '-l', '--last', help='continue last download task', action="store_true", default=False)
 parser.add_argument('-d', '--download',
-                    help='create a downloading task that according the downloadlistdb', type=int, default=0)
+                    help='create a downloading task that according the downloadlistdb', action="store_true", default=False)
 
 
 # parser.add_argument('-c','--continue',help='check the apk downloaded for the latest version',default=0)
@@ -62,7 +62,7 @@ args = parser.parse_args()
 
 out_path = args.output
 Max_count = args.max
-update_flag = args.update
+# update_flag = args.update
 input_store = args.store
 flag_refresh = args.refresh
 flag_continue = args.last
@@ -285,45 +285,6 @@ class crawler():
 
     def get_links(self):
         if self.store == 'kuan':
-            # payload={'p':1}
-            # res = requests.post(self.url,params=payload,headers=headers)
-            # markup = res.text
-            # # print(markup)
-            # soup = BeautifulSoup(markup,"lxml")
-            # # print(soup)
-            # soup = soup.find('div','app_left_list')
-            # # print(soup)
-            # apks = soup.find_all('a')
-            # print('solving the %s:page:%s'%(self.store,1))
-            # file = open('./downlist.'+self.store,'a')
-            # for apk in apks[:10]:
-            #     # print(apk.get('href'))
-            #     href = apk.get('href')
-            #     file.write('https://www.coolapk.com'+href+'\n')
-            #     #add to list
-            # lastpage_href = apks[-1].get('href')
-            # reg = re.compile(r"=\d+")
-            # Maxpage = int(reg.search(lastpage_href)[0][1:])
-            # # print(Maxpage)
-
-            # for i in range(2,Maxpage+1):
-            #     payload={'p':i}
-            #     res = requests.post(self.url,params=payload,headers=headers)
-            #     markup = res.text
-            #     # print(markup)
-            #     soup = BeautifulSoup(markup,"lxml")
-            #     # print(soup)
-            #     soup = soup.find('div','app_left_list')
-            #     # print(soup)
-            #     apks = soup.find_all('a')
-            #     print('solving the %s:page:%s'%(self.store,i))
-            #     for apk in apks[:10]:
-            #         href = apk.get('href')
-            #         if href.startswith(r'/apk?p='):
-            #             break
-            #         file.write('https://www.coolapk.com'+href+'\n')
-            #         #add to list
-            # file.close()
             exit(1)
 
         elif self.store == 'anzhi':
@@ -370,8 +331,11 @@ class crawler():
                         links = [cate.find('a', 'name').get('href')
                                  for cate in cates]
                         for link in links:
-                            comma = 'INSERT INTO APKLIST(url,platform) SELECT \'%s\',\'%s\' WHERE NOT EXISTS(SELECT * FROM APKLIST WHERE url =\'%s\' and platform=\'%s\');' % (
-                                link, 'wandoujia', link, 'wandoujia')
+                            # comma = 'INSERT INTO APKLIST(url,platform) SELECT \'%s\',\'%s\' WHERE NOT EXISTS(SELECT * FROM APKLIST WHERE url =\'%s\' and platform=\'%s\');' % (
+                            #     link, 'wandoujia', link, 'wandoujia')
+                            # conn.execute(comma)
+                            comma = 'REPLACE INTO APKLIST(url,platform,status) VALUES(\'%s\',\'%s\',0) ;' % (
+                                link, 'wandoujia')
                             conn.execute(comma)
                             # print(link)
                         conn.commit()
@@ -390,6 +354,12 @@ def main():
 
     if(flag_continue):
         print("continue last task")
+        if input_store in stores_list:
+            # TODO maybe do something more
+            down = downloader()
+            query = "download.%s()" % input_store
+            exec(query)
+            # down.wandoujia()
         exit(1)
 
     if(flag_refresh):
@@ -397,19 +367,15 @@ def main():
             cr = crawler(input_store)
             print("get %s urls" % input_store)
             cr.get_links()
-        # download(input_store)
-        # elif input_store == None:
-        #     for i in stores_list:
-        #         cr = crawler(i)
-        #         cr.get_links()
-        #      # download(i)
+            print('APPlist refresh done!')
         else:
+            print('somthing wrong!')
             exit(1)
 
     if(flag_download):
+        # create a download task
         down = downloader()
         down.wandoujia()
-    # crawler.download('taobao','https://android-apps.pp.cn/fs08/2018/08/16/5/110_b2a11955d308c069f07033959edc1226.apk?yingid=pp_client&packageid=400685613&md5=03661e11fb66e5dd97c225f3ae478f45&minSDK=14&size=91718666&shortMd5=8c65554e572b38a1f82b92d496b23b3e&crc32=3329255329')
 
 
 def test():
@@ -423,17 +389,7 @@ def test():
     c = crawler('wandoujia')
     c.get_links()
 
-    # down = downloader()
-    # down.wandoujia()
-
-    # print(args.r)
-
-    # d.db_insert('taobao','test',45,md5('taobao'))
-    # d.db_gethash('taobao','test')
-    # d.db_delete('taobao','test')
-    # d.db_update('taobao','test',50,md5('taobao'))
-
 
 if __name__ == '__main__':
-    # main()
-    test()
+    main()
+    # test()
