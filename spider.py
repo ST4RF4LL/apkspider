@@ -13,7 +13,8 @@ import re
 import lxml
 from bs4 import BeautifulSoup
 import threading
-import json
+# import json
+
 
 stores_list = ['wandoujia']
 
@@ -110,11 +111,11 @@ class db_opt():
             apkname, platform, size, hash_val)
         # print(comma)
         c.execute(comma)
-        print("insert info into database successfully!")
+        # print("insert info into database successfully!")
         conn.commit()
         conn.close()
 
-    # My opinion, size and md5 may change together
+    # My opinion, size and md5 may change togethers
     def db_update(self, apkname, platform, size, hash_val):
         conn = sqlite3.connect('apkspider.db')
         c = conn.cursor()
@@ -183,10 +184,20 @@ class db_opt():
 
     def list_db_update_status(self, id, status):
         with sqlite3.connect('apkspider.db') as conn:
-            comma = r"update APKLIST set status = %d where id = %d;" % (
+            comma = "update APKLIST set status = %d where id = %d;" % (
                 status, id)
             conn.execute(comma)
 
+    def list_db_renew(self,platform):
+        with sqlite3.connect('apkspider.db') as conn:
+            comma = "update APKLIST set status = 0 where platform =\'%s\'"%platform
+            conn.execute(comma)
+
+    def list_db_downloadedcount(self,platform):
+        with sqlite3.connect('apkspider.db') as conn:
+            comma = "select COUNT(*) from APKLIST where status =2 and platform =\'%s\'" % platform
+            li = list(conn.execute(comma))
+            return li[0][0]
 
 class downloader():
     def __init__(self):
@@ -207,8 +218,6 @@ class downloader():
 
     def wandoujia(self):
         global download_count
-        # with open('downlist.wandoujia','r+') as listfile:
-
         id, link = self.db.list_db_geturl('wandoujia')
         print('link:'+link)
         while link != '' and download_count < Max_count:
@@ -219,20 +228,18 @@ class downloader():
             # print(url)
             reg = re.compile(r"/apps/[a-zA-Z.]+")
             name = reg.search(link)[0][6:]
-
             filepath = self.savepath+name
-
             old_hash = self.db.db_gethash(name, 'wandoujia')
             # print(old_hash)
             if old_hash != '':  # means not new file but I have no idea how to get the hash before I download it
-                # so I save it as 'temp_md5',then I will check this new file's md5
+                                # so I save it as 'temp_md5',then I will check this new file's md5
                 filepath = self.savepath+'temp_'+md5(name)
             res = requests.head(url, allow_redirects=True)
             # true_url = res.headers['Location']
             # res = requests.head(true_url)
             filesize = int(res.headers['Content-Length'])
             # self.download(name,url)
-            print('start downloading %s' % name)
+            print(str(download_count)+":"+name)
             t1 = threading.Thread(target=self.download, args=(filepath, url))
             t1.start()
             self.download_progress(filepath, filesize)
@@ -240,21 +247,21 @@ class downloader():
             with open(filepath, 'rb') as file_done:
                 hash_val = md5_2(file_done.read())
 
-            print("old_hash:%s\nnew_hash:%s" % (old_hash, hash_val))
+            # print("old_hash:%s\nnew_hash:%s" % (old_hash, hash_val))
 
             if hash_val == old_hash:  # means the same file,delete this file
                 # delete
                 os.remove(filepath)
-                print('same apk,deleted!')
+                # print('same apk,deleted!')
             elif old_hash == '':  # means this is a new file
-                print('a new apk!')
+                # print('a new apk!')
                 self.db.db_insert(name, 'wandoujia',
                                   int(filesize/1024), hash_val)
                 os.rename(filepath, self.savepath+name+'_'+hash_val)
                 download_count += 1
 
             else:
-                print('this apk is updated to latest!')
+                # print('this apk is updated to latest!')
                 self.db.db_update(name, 'wandoujia',
                                   int(filesize/1024), hash_val)
                 os.rename(filepath, self.savepath+name+'_'+hash_val)
@@ -274,7 +281,7 @@ class downloader():
                     current_size = os.path.getsize(filepath)
                     time.sleep(0.1)
                     bar.update(int(current_size/1024))
-        print('download success and saved as:%s' % filepath)
+        # print('download success and saved as:%s' % filepath)
 
 
 class crawler():
@@ -295,23 +302,7 @@ class crawler():
             markup = BeautifulSoup(res.text, 'lxml')
             cates = markup.find_all('li', 'parent-cate')
             urls = [cate.find('a', 'cate-link').get('href') for cate in cates]
-            # print(urls)
-            # with open('./downlist.'+self.store,'a') as file:
             with sqlite3.connect('apkspider.db') as conn:
-                # for child_page in urls:
-                #     i=1
-                #     # print(child_page)
-                #     while i :
-                #         print('get page:%d\n'%i)
-                #         url = child_page + r'/%d'%i
-                #         res = requests.get(url,headers=headers)
-                #         markup = BeautifulSoup(res.text,'lxml')
-                #         print(markup)
-                #         exit(1)
-                #         cates = markup.find_all('li','card')
-                #         if len(cates)==0:
-                #             break;
-
                 for child_page in urls:
                     catid = child_page[-4:]
                     cate_url = "https://www.wandoujia.com/wdjweb/api/category/more?catId=%s&subCatId=0" % catid
@@ -343,7 +334,7 @@ class crawler():
                         # exit(1)
 
         else:
-            print('Cannot found target appstore:%s' % store)
+            print('Cannot found target appstore:%s' % self.store)
             exit(1)
 
 
@@ -353,11 +344,14 @@ def main():
     d.db_init()
 
     if(flag_continue):
+        global download_count
+        download_count = d.list_db_downloadedcount('wandoujia')
+        print(download_count)
         print("continue last task")
         if input_store in stores_list:
             # TODO maybe do something more
             down = downloader()
-            query = "download.%s()" % input_store
+            query = "down.%s()" % input_store
             exec(query)
             # down.wandoujia()
         exit(1)
@@ -374,20 +368,9 @@ def main():
 
     if(flag_download):
         # create a download task
+        d.list_db_renew(input_store)
         down = downloader()
         down.wandoujia()
-
-
-def test():
-    d = db_opt()
-    # try:
-    #     d.db_init()
-    # except:
-    #     pass
-    d.db_init()
-
-    c = crawler('wandoujia')
-    c.get_links()
 
 
 if __name__ == '__main__':
